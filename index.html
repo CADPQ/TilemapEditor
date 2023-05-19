@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title></title>
+    <script type="text/javascript" src="Tilemap.js"></script>
+    <script type="text/javascript">
+      const waitForCallback = (element, callback, timeout=10000) => {
+        return new Promise((resolve, reject) => {
+          let callbackFun = function () {
+            resolve();
+            element.removeEventListener(callback, callbackFun);
+          }
+          setTimeout(reject, timeout);
+          element.addEventListener(callback, callbackFun);
+        });
+      }
+
+      var tileSize = 32;
+      var width = 1;
+      var height = 1;
+      var tilemap;
+      var map = [[0]];
+      var colorSheetLink = {}
+      var downloadLink;
+
+      var selected;
+
+      var undo = [];
+      var undoStack = [];
+      var undoIndex = -1;
+      var tiles = 0;
+
+      var spritesheet;
+      var mousePosition;
+
+      function changeWidth(width) {
+        if (width.value > window.width) {
+          for (var i = 0; i < map.length; i++) {
+            for (var j = 0; j < width.value - window.width; j++) {
+              map[i].push(map[i][map[i].length - 1]);
+            }
+          }
+        }
+        if (width.value < window.width) {
+          for (var i = 0; i < map.length; i++) {
+            map[i] = map[i].slice(0, width.value);
+          }
+        }
+
+        window.width = parseInt(width.value);
+
+        drawCanvas();
+      }
+      function changeHeight(height) {
+        if (height.value > window.height) {
+          var times = height.value - window.height;
+          for (var i = 0; i < times; i++)
+            map.push(JSON.parse(JSON.stringify(map[map.length - 1])));
+        }
+        if (height.value < window.height) {
+          map = map.slice(0, height.value);
+        }
+
+        window.height = parseInt(height.value);
+
+        drawCanvas();
+      }
+      function changeTileSize(tileSize) {
+        window.tileSize = parseInt(tileSize.value);
+        tilemap.tileSize = parseInt(tileSize.value);
+        drawCanvas();
+      }
+      function drawCanvas() {
+        //downloadLink.href = "data:text/json," + encodeURIComponent(JSON.stringify(map));
+
+        var canvas = document.getElementById("canvas");
+        canvas.height = height * tileSize;
+        canvas.width = width * tileSize;
+        tilemap.cameraHeight = height * tileSize;
+        tilemap.cameraWidth = width * tileSize;
+        tilemap.map = map;
+
+        var ctx = canvas.getContext("2d");
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        tilemap.drawToCanvas(canvas);
+
+        //draw grid
+        for (var i = 0; i < width; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * tileSize, 0);
+          ctx.lineTo(i * tileSize, height * tileSize);
+          ctx.stroke();
+        }
+        for (var i = 0; i < height; i++) {
+          ctx.beginPath();
+          ctx.moveTo(0, i * tileSize);
+          ctx.lineTo(width * tileSize, i * tileSize);
+          ctx.stroke();
+        }
+      }
+
+      async function setUpColorPallete() {
+        var colorPallete = document.getElementById("color-pallete");
+        colorPallete.innerHTML = "";
+        for (var i = 0; i < tiles; i++) {
+          var tileElement = document.createElement("div");
+          tileElement.className = "color-pallete-item";
+          if (i == 0) {
+            tileElement.classList.add("selected");
+            selected = tileElement;
+          }
+          tileElement.dataset.tileNum = i;
+          tileElement.setAttribute("onclick", "selectColor(this)");
+
+          var tileImage = document.createElement("img");
+          tileImage.src = spritesheet.src;
+          await waitForCallback(tileImage, "load", 1000);
+
+          var clipPath = "inset(0px " + (tileImage.naturalWidth - ((i * tileSize) + tileSize)) + "px " + (tileImage.naturalHeight - tileSize) + "px " + (i * tileSize) + "px)";
+          console.log(clipPath);
+          tileImage.style.clipPath = clipPath;
+          tileImage.style.position = "absolute"
+          tileImage.style.left = "-" + i * tileSize + "px";
+
+          var tileName = document.createElement("span");
+          tileName.innerHTML = i;
+
+          tileElement.appendChild(tileImage);
+          tileElement.appendChild(tileName);
+          colorPallete.appendChild(tileElement);
+          colorPallete.appendChild(document.createElement("br"));
+        }
+      }
+      function init() {
+        //Initilize color pallete
+        spritesheet = document.getElementById("spritesheet");
+        mousePosition = document.getElementById("mouse-position");
+        setUpColorPallete();
+        downloadLink = document.getElementById("download");
+        document.getElementById('spritesheetinput').onchange = function (evt) {
+          var files = document.getElementById("spritesheetinput").files;
+
+          var fr = new FileReader();
+          fr.onload = function () {
+            spritesheet.src = fr.result;
+
+            spritesheet.onload = function () {
+              tiles = spritesheet.naturalWidth / tileSize;
+              setUpColorPallete();
+              drawCanvas();
+            }
+          }
+          fr.readAsDataURL(files[0]);
+        }
+        document.getElementById('mapinput').onchange = function (evt) {
+          var files = document.getElementById("mapinput").files;
+
+          var fr = new FileReader();
+          fr.onload = function (e) {
+            var output = e.target.result;
+            loadMap(output);
+          };//end onload()
+          fr.readAsText(files[0]);
+        }
+        tilemap = new Tilemap(document.getElementById("spritesheet"), map, tileSize, 0, 0)
+        drawCanvas();
+      }
+      function loadMap(map) {
+        // var oldMap = JSON.parse(JSON.stringify(map));
+        // window.map = map;
+        // window.map.map = [];
+        //
+        // for (var i = 0; i < oldMap.map.length; i++) {
+        //   window.map.map.push(oldMap.map[i].split(","));
+        // }
+        window.map = JSON.parse(map);
+
+        height = window.map.length;
+        document.getElementById("height").value = height;
+        width = window.map[0].length;
+        document.getElementById("width").value = width;
+        tilemap.map = window.map;
+        setUpColorPallete();
+        drawCanvas();
+      }
+
+      function selectColor(element) {
+        selected.classList.remove("selected");
+        selected = element;
+        selected.classList.add("selected");
+      }
+
+      function draw(event) {
+        var rect = event.target.getBoundingClientRect();
+        var x = Math.floor((event.clientX - rect.left) / tileSize);
+        var y = Math.floor((event.clientY - rect.top) / tileSize);
+        console.log(x + ", " + y)
+
+        var tileNum = parseInt(selected.dataset.tileNum);
+
+        if (map[y][x] != tileNum) {
+          undo.push({"x":x,"y":y,"orig":map[y][x],"new":tileNum});
+          map[y][x] = tileNum;
+
+          addUndoToStack();
+
+          drawCanvas();
+        }
+      }
+
+      var scale = 1;
+      var origDist;
+      var dist;
+
+      function startZoom(event) {
+        event.preventDefault();
+      }
+
+      function zoom(event) {
+        var currentDist = origDist * event.scale;
+
+        var zoomScale = currentDist / dist;
+        dist = currentDist;
+
+        scale = scale * zoomScale;
+
+        scale = Math.max(0.25, Math.min(scale, 1.75));
+
+        document.getElementById("canvas").style.transform = document.getElementById("canvas").style.transform.replace(/scale\([0-9.]+, [0-9.]+\)/, "scale(" + scale + ", " + scale + ")");
+      }
+
+      function drawTouchStart(event) {
+        if (event.touches.length == 2) {
+          var rect = event.target.getBoundingClientRect();
+          origDist = Math.hypot(event.touches[0].clientX - rect.left - event.touches[1].clientX - rect.left, event.touches[0].clientY - rect.top - event.touches[1].clientY - rect.top);
+          dist = origDist;
+        }
+
+        drawTouch(event);
+      }
+
+      function drawTouch(event) {
+        var touch = event.touches[0];
+        if (touch.touchType == "stylus") {
+          var rect = event.target.getBoundingClientRect();
+          
+          var tileNum = parseInt(selected.dataset.tileNum);
+          var x = Math.floor(((touch.clientX - rect.left) * (1 / scale)) / tileSize);
+          var y = Math.floor(((touch.clientY - rect.top) * (1 / scale)) / tileSize);
+          if (map[y][x] != tileNum) {
+            undo.push({"x":x,"y":y,"orig":map[y][x],"new":tileNum});
+            map[y][x] = tileNum;
+
+            drawCanvas();
+          }
+
+          event.preventDefault();
+          return false;
+        }
+      }
+
+      function addUndoToStack() {
+        undoStack = undoStack.slice(0, undoIndex + 1);
+        undoStack.push(undo);
+        undo = [];
+        undoIndex++;
+      }
+
+      function Undo() {
+        if (undoIndex != -1) {
+          var undoAction = undoStack[undoIndex];
+          undoIndex--;
+          for (var i = 0; i < undoAction.length; i++) {
+            map[undoAction[i]["y"]][undoAction[i]["x"]] = undoAction[i]["orig"];
+          }
+          drawCanvas();
+        }
+      }
+      function Redo() {
+        if (undoStack.length > 0 && undoIndex <= undoStack.length - 2) {
+          var undoAction = undoStack[undoIndex + 1];
+          undoIndex++;
+          for (var i = 0; i < undoAction.length; i++) {
+            map[undoAction[i]["y"]][undoAction[i]["x"]] = undoAction[i]["new"];
+          }
+          drawCanvas();
+        }
+      }
+      function saveMap()
+      {
+        downloadLink.href = "data:text/csv," + encodeURIComponent(JSON.stringify(map));
+      }
+
+      function mousemove(e) {
+        var rect = e.target.getBoundingClientRect();
+        var x = Math.floor((e.clientX - rect.left) / tileSize);
+        var y = Math.floor((e.clientY - rect.top) / tileSize);
+
+        mousePosition.innerText = `tile: ${x} ${y} pixel ${x * tileSize} ${y * tileSize}`;
+      }
+    </script>
+    <style media="screen">
+      canvas {
+        border: 1px solid black;
+        transform-origin: 0 0;
+      }
+      .map {
+        width: 70%;
+        overflow: scroll;
+        float: left;
+        max-height: 90vh;
+      }
+      .color-pallete {
+        width: 30%;
+        overflow: scroll;
+        float: left;
+        max-height: 90vh;
+      }
+      .color-pallete-item {
+        width: 100%;
+        height: 32px;
+        text-align: center;
+        position: relative;
+      }
+      .color-pallete-item.selected {
+        border: 2px solid black;
+      }
+    </style>
+  </head>
+  <body onload="init()">
+    <div id="myDebugElement"></div>
+    <img style="display:none" id="spritesheet">
+    Width: <input type="number" id="width" onchange="changeWidth(this)" value="1" placeholder="Set canvas width in number of tiles">
+    Height: <input type="number" id="height" onchange="changeHeight(this)" value="1" placeholder="Set canvas height in number of tiles">
+    Tile size: <input type="number" onchange="changeTileSize(this)" value="32" placeholder="Set tile size in pixels">
+    Sprite sheet: <input type="file" id="spritesheetinput" accept="image/*">
+    Map: <input type="file" id="mapinput" accept=".json">
+    <button type="button" onclick="Undo()">Undo</button>
+    <button type="button" onclick="Redo()">Redo</button>
+    Mouse position: <span id="mouse-position"></span>
+    <a href="#" download="map.json" id="download" onclick="saveMap()">Download JSON</a>
+    <br>
+    <div>
+      <div class="map">
+        <canvas id="canvas" style="transform: scale(1, 1);" width="512" height="512" onclick="draw(event)" ontouchstart="drawTouchStart(event)" ontouchmove="drawTouch(event)" ontouchend="addUndoToStack()" ongesturestart="startZoom(event)" ongesturechange="zoom(event)" ongestureend="zoom(event)" onmousemove="mousemove(event)"></canvas>
+      </div>
+      <div class="color-pallete" id="color-pallete">
+      </div>
+    </div>
+  </body>
+</html>
