@@ -33,6 +33,7 @@
 
       var spritesheet;
       var mousePosition;
+      var mouseDrawing = false;
 
       function changeWidth(width) {
         if (width.value > window.width) {
@@ -294,12 +295,24 @@
         downloadLink.href = "data:text/csv," + encodeURIComponent(JSON.stringify(map));
       }
 
+      function mouseup() {
+        mouseDrawing = true;
+      }
+
+      function mousedown() {
+        mouseDrawing = false;
+      }
+
       function mousemove(e) {
         var rect = e.target.getBoundingClientRect();
         var x = Math.floor((e.clientX - rect.left) / tileSize);
         var y = Math.floor((e.clientY - rect.top) / tileSize);
 
         mousePosition.innerText = `tile: ${x} ${y} pixel ${x * tileSize} ${y * tileSize}`;
+
+        if (mouseDrawing) {
+          draw(e);
+        }
       }
     </script>
     <style media="screen">
@@ -345,7 +358,7 @@
     <br>
     <div>
       <div class="map">
-        <canvas id="canvas" style="transform: scale(1, 1);" width="512" height="512" onclick="draw(event)" ontouchstart="drawTouchStart(event)" ontouchmove="drawTouch(event)" ontouchend="addUndoToStack()" ongesturestart="startZoom(event)" ongesturechange="zoom(event)" ongestureend="zoom(event)" onmousemove="mousemove(event)"></canvas>
+        <canvas id="canvas" style="transform: scale(1, 1);" width="512" height="512" onclick="draw(event)" ontouchstart="drawTouchStart(event)" ontouchmove="drawTouch(event)" ontouchend="addUndoToStack()" ongesturestart="startZoom(event)" ongesturechange="zoom(event)" ongestureend="zoom(event)" onmousedown="mousedown()" onmousemove="mousemove(event)" mouseup="mouseup()"></canvas>
       </div>
       <div class="color-pallete" id="color-pallete">
       </div>
